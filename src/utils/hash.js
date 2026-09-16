@@ -5,3 +5,7 @@ export async function hashPassword(password) {
 
     return bcrypt.hash(password, salt)
 }
+
+export async function verifyPassword(password, hashedPassword) {
+    return await bcrypt.compare(password, hashedPassword);
+}

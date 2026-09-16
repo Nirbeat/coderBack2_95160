@@ -1,5 +1,5 @@
 import { userModel } from "../models/userModel.js"
-import { hashPassword } from "../utils/hash.js"
+import { hashPassword, verifyPassword } from "../utils/hash.js"
 
 export async function registerUser(userData) {
 
@@ -15,13 +15,13 @@ export async function registerUser(userData) {
     // texto-sin-arroba-ni-espacios + @ + texto-sin-arroba-ni-espacios + . + texto-sin-arroba-ni-espacios
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-    
+
     if (!emailRegex.test(email)) {
         throw new Error("Formato de email inválido");
     }
 
     //Validamos largo password minimo 6 caracteres
-    if(password.length < 6) {
+    if (password.length < 6) {
         throw new Error("La contraseña debe tener al menos 6 caracteres");
     }
 
@@ -47,4 +47,15 @@ export async function registerUser(userData) {
     delete userResponse.password
 
     return userResponse
-}  
+}
+
+export async function loginUser(userData) {
+    const { email, password } = userData;
+
+    const user = await userModel.findOne({ email });
+    if (user == null) throw new Error("Credenciales inválidas");
+
+    if (!(await verifyPassword(password, user.password))) throw new Error("Credenciales inválidas password");
+
+    return user;
+}
