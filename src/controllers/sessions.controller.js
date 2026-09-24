@@ -3,68 +3,73 @@ import { generateToken, verifyToken } from "../utils/jwt.js";
 
 export async function registerController(req, res) {
 
-    try {
-        const user = await registerUser(req.body);
-        res.status(201).json({
-            status: 'success',
-            payload: user
-        })
-
-    } catch (error) {
-        //completar
-        if (error.message === "Faltan campos obligatorios" ||
-            error.message === "Formato de email inválido" ||
-            error.message === "La contraseña debe tener al menos 6 caracteres"
-        ) {
-            return res.status(400).json({
-                status: 'error',
-                message: error.message
-            })
-        } else if (error.message === "El email ya está registrado") {
-            return res.status(409).json({
-                status: 'error',
-                message: error.message
-            })
-        } else {
-            res.status(500).json({
-                status: 'error',
-                message: 'Error interno del servidor'
-            })
+    // Enviamos la respuesta
+    res.status(201).json({
+        status: 'success',
+        message: 'Usuario registrado exitosamente',
+        payload:{
+            id: req.user._id,
+            first_name: req.user.first_name,
+            last_name: req.user.last_name,
+            email: req.user.email,
+            role: req.user.role
         }
-    }
+    });
+    
 }
 
-export async function loginController(req, res, next) {
-    try {
-        const user = await loginUser(req.body);
-        const token = generateToken(user.toJSON());
-        res.status(200)
-            .cookie("jwt", token, { httpOnly: true, maxAge: 1000 * 60, signed: true })
-            .json({ user });
-    } catch (error) {
-        res.status(400).json({ error: error.message });
+
+export async function loginController(req, res) {
+    
+    // Guardamos los datos que necesitamos para generar el token
+    const tokenUser = {
+        id: req.user._id,
+        email: req.user.email,
+        role: req.user.role
     }
+
+    // Generamos el token
+    const token = generateToken(tokenUser);
+
+    // Establecemos la cookie y le pasamos el token
+    res.cookie("Este_es_el_nombre_de_la_cookie", token, {
+        maxAge: 60 * 60 * 1000, // El tiempo está expresado en milisegundos, resultando en 1 hora.
+        httpOnly: true,         // La cookie no es accesible via JavaScript (protección XSS)
+        signed: true            // La cookie está firmada (protección contra manipulación)
+    })
+
+    // Enviamos la respuesta
+    res.status(200).json({
+        status: "success",
+        message: "Login correcto"
+    })
+    
+
 }
 
-export async function logoutController(req, res, next) {
-    try {
-        res.status(200).clearCookie("jwt").json({ message: "sesion finalizada exitosamente" });
-    } catch (error) {
-        res.status(400).json({ error: error.message });
-    }
+
+export async function logoutController(req, res) {
+    
+    // Eliminamos la cookie que contiene el token
+    res.clearCookie("Este_es_el_nombre_de_la_cookie") 
+
+    res.status(200).json({
+        status: "succes",
+        message: "Logout correcto"
+    })
+
 }
 
-/**
- * 
- * @param {*} req 
- * @param {import("express").Response} res 
- * @param {*} next 
- */
-export async function currentController(req, res, next) {
-    try {
-        const user = verifyToken(req.signedCookies.jwt);
-        res.status(200).json(user);
-    } catch (error) {
-        res.status(401).json({ error: "sesion expirada" });
-    }
+
+export async function currentController(req, res) {
+    
+    res.status(200).json({
+        status: "success",
+        payload: {
+            id: req.user._id,
+            email: req.user.email,
+            role: req.user.role
+        }
+    })
 }
+
