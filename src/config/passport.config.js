@@ -1,7 +1,7 @@
 import passport from "passport"
 import { Strategy as LocalStrategy} from "passport-local"
 import { Strategy as JwtStrategy } from "passport-jwt"
-import { userModel } from "../models/userModel.js"
+import { userModel } from "../models/user.model.js"
 import { hashPassword, verifyPassword } from "../utils/hash.js"
 
 

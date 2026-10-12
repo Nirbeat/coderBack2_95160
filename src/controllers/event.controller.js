@@ -1,33 +1,15 @@
-import { eventModel } from "../models/eventModel.js";
+import { eventsService, createEvent, updateEvent } from "../services/events.services.js";
 
-export async function getAll(req, res, next) {
+export async function getEventsController(req, res) {
     try {
-        const events = await eventModel.find({}).populate("organizer");
-        res.status(200).json({ message: "success", events })
+        const result = await eventsService(req.query);
+        res.status(200).json({ message: "success", ...result })
     } catch (error) {
         console.log(error);
     }
 }
 
-export async function getById(req, res, next) {
-    try {
-
-    } catch (error) {
-        console.log(error);
-    }
-}
-
-export async function createEvent(req, res, next) {
-    try {
-        const newEvent = await eventModel.create({ ...req.body, organizer: req.user.id });
-
-        res.status(200).json({ success: "evento creado", newEvent });
-    } catch (error) {
-        console.log(error);
-    }
-}
-
-export async function updateEvent(req, res, next) {
+export async function getByIdController(req, res, next) {
     try {
 
     } catch (error) {
@@ -35,10 +17,29 @@ export async function updateEvent(req, res, next) {
     }
 }
 
-export async function deleteEvent(req, res, next) {
+export async function createEventController(req, res, next) {
     try {
-
+        const event = await createEvent(req.body, req.user);
+        res.status(201).json({ status: "success", data: event });
     } catch (error) {
-        console.log(error);
+        res.status(400).json({ status: "error", message: error.message });
+    }
+}
+
+export async function updateEventController(req, res, next) {
+    try {
+        const event = await updateEvent(req.params.id, req.body, req.user);
+        res.status(200).json({ status: "success", data: event });
+    } catch (error) {
+        res.status(400).json({ status: "error", message: error.message });
+    }
+}
+
+export async function deleteEventController(req, res, next) {
+    try {
+        const event = await deleteEvent(req.params.id, req.user);
+        res.status(200).json({ status: "success", data: event });
+    } catch (error) {
+        res.status(400).json({ status: "error", message: error.message });
     }
 }

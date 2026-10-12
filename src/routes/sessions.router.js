@@ -10,7 +10,7 @@ router.post("/login", passport.authenticate("login", { session: false }), loginC
 
 router.get("/current", passport.authenticate("current", { session: false }), currentController);
 
-router.delete("/logout", logoutController); // Logout solo elimina la cookie, no necesita Passport
+router.post("/logout", logoutController); // Logout solo elimina la cookie, no necesita Passport
 
  
 export default router;

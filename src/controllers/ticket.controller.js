@@ -1,4 +1,4 @@
-import { ticketModel } from "../models/ticketModel.js"
+import { ticketModel } from "../models/ticket.model.js"
 
 export async function getAll(req, res, next) {
     try {

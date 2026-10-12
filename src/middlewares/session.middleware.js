@@ -1,4 +1,4 @@
-import { eventModel } from "../models/eventModel.js";
+import { eventModel } from "../models/event.model.js";
 
 export function rolesPermission(roles) {
     return function (req, res, next) {
