@@ -1,32 +1,30 @@
-import { userModel } from "../models/userModel.js"
+import mongoUserDao from "../dao/mongodb/user.dao.js";
+// import postgreUserDao from "../dao/postgresql/user.dao.js";
+import UserRepository from "../repository/user.repository.js";
+// import userDao from "../dao/postgresql/user.dao.js";
 import { hashPassword, verifyPassword } from "../utils/hash.js"
+
+const userRepository = new UserRepository(mongoUserDao);
 
 export async function registerUser(userData) {
 
     const { first_name, last_name, email, password } = userData
 
-    //Validamos campos requeridos
     if (!first_name || !last_name || !email || !password) {
         throw new Error("Faltan campos obligatorios")
     }
 
-    //Validar formato email
-    // REGEX regular expresions
-    // texto-sin-arroba-ni-espacios + @ + texto-sin-arroba-ni-espacios + . + texto-sin-arroba-ni-espacios
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 
     if (!emailRegex.test(email)) {
         throw new Error("Formato de email inválido");
     }
 
-    //Validamos largo password minimo 6 caracteres
     if (password.length < 6) {
         throw new Error("La contraseña debe tener al menos 6 caracteres");
     }
 
-    //Validar email repetido
-    const existingUser = await userModel.findOne({ email });
+    const existingUser = await userRepository.findByEmail(email)
 
     if (existingUser) {
         throw new Error("El email ya está registrado");
@@ -34,7 +32,7 @@ export async function registerUser(userData) {
 
     const hashedPassword = await hashPassword(password)
 
-    const newUser = await userModel.create({
+    const newUser = await userDao.create({
         first_name,
         last_name,
         email,
@@ -42,7 +40,6 @@ export async function registerUser(userData) {
         role: "user"
     })
 
-    //Responder al controller
     const userResponse = newUser.toObject()
     delete userResponse.password
 
@@ -50,12 +47,16 @@ export async function registerUser(userData) {
 }
 
 export async function loginUser(userData) {
+    // try {
     const { email, password } = userData;
 
-    const user = await userModel.findOne({ email });
+    const user = await userRepository.findByEmail(email);
     if (user == null) throw new Error("Credenciales inválidas");
 
     if (!(await verifyPassword(password, user.password))) throw new Error("Credenciales inválidas password");
 
     return user;
+    // } catch (error) {
+    //     await new UserRepository(postgreUserDao).findByEmail(email)
+    // }
 }

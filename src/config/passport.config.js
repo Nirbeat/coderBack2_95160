@@ -1,116 +1,79 @@
 import passport from "passport"
-import { Strategy as LocalStrategy} from "passport-local"
+import { Strategy as LocalStrategy } from "passport-local"
 import { Strategy as JwtStrategy } from "passport-jwt"
 import { userModel } from "../models/user.model.js"
 import { hashPassword, verifyPassword } from "../utils/hash.js"
+import UserRepository from "../repository/user.repository.js"
+import userDao from "../dao/mongodb/user.dao.js"
+import { RegisterUserDTO, SessionUserDataDTO } from "../dto/user.dto.js"
 
+const userRepository = new UserRepository(userDao);
 
-// Función para extraer el token de las cookies, queusará la estrategia current
 const cookieExtractor = req => {
-    
     let token = null
-    if(req && req.cookies) token = req.signedCookies.Este_es_el_nombre_de_la_cookie
+    if (req && req.cookies) token = req.signedCookies.Este_es_el_nombre_de_la_cookie
     return token
 }
 
-
-
-// Estrategia register: registra un nuevo usuario
-passport.use("register", new LocalStrategy({usernameField: "email", passReqToCallback: true},
+passport.use("register", new LocalStrategy({ usernameField: "email", passReqToCallback: true },
     async (req, email, password, done) => {
-
         try {
-            const {first_name, last_name} = req.body
+            const userData = new RegisterUserDTO(req.body);
 
-            if(!first_name || !last_name || !email || !password) {
-               return done(null, false, {message: "Todos los campos son obligatorios"})
+            const userExists = await userRepository.findByEmail(userData.email)
+
+            if (userExists) {
+                return done(new Error("El usuario ya existe"), false, { message: "El usuario ya existe" })
             }
 
-            const normalizedEmail = email.toLowerCase().trim()
-            const userExists = await userModel.findOne({email: normalizedEmail})
+            const hashedPassword = await hashPassword(password);
+            const newUser = await userRepository.create({ ...userData, password: hashedPassword })
 
-            if(userExists) {
-                return done(null, false, {message: "El usuario ya existe"})
-            }
-
-            //hashear la contraseña
-            const hashedPassword = await hashPassword(password)
-
-            const newUser = await userModel.create({
-                first_name,
-                last_name,
-                email: normalizedEmail,
-                password: hashedPassword,
-                role: "user"
-            })
-
-            return done(null, newUser) 
-            // Los datos del usuario quedarán disponibles en req.user
-
+            return done(null, newUser)
         } catch (error) {
-            
             return done(error)
         }
     }
-) )
+))
 
-// Estrategia login: autentica un usuario existente
-passport.use("login", new LocalStrategy({usernameField: "email"}, 
+passport.use("login", new LocalStrategy({ usernameField: "email" },
     async (email, password, done) => {
-
         try {
-          
             const normalizedEmail = email.toLowerCase().trim()
 
-            const user = await userModel.findOne({email: normalizedEmail})
+            const user = await userModel.findOne({ email: normalizedEmail })
 
-            if(!user) { 
-                return done(null, false, {message: "Usuario no encontrado"})
+            if (!user) {
+                return done(null, false, { message: "Usuario no encontrado" })
             }
 
             const validPassword = verifyPassword(password, user.password)
 
-            if(!validPassword) {
-                return done(null, false, {message: "Contraseña incorrecta"})
+            if (!validPassword) {
+                return done(null, false, { message: "Contraseña incorrecta" })
             }
-         
-            return done(null, user) 
-            // Los datos del usuario quedarán disponibles en req.user
-
+            return done(null, user)
         } catch (error) {
-            
             return done(error)
         }
-        
     }
 ))
 
-
-// Estrategia current: verifica el token JWT enviado dentro de la cookie en la petición a /current
 passport.use("current", new JwtStrategy({
+    jwtFromRequest: cookieExtractor,
+    secretOrKey: process.env.JWT_SECRET
+},
 
-     jwtFromRequest: cookieExtractor,       // cookieExtractor extrae el token de las cookies
+    async (jwtPayload, done) => {
+        try {
+            const user = await userModel.findById(jwtPayload.id)
 
-     secretOrKey: process.env.JWT_SECRET    // clave secreta para verificar el token, que está guardada en el .env
-}, 
-// Passport extrae los datos del usuario del token y los guarde en jwtPayload
-async (jwtPayload, done)=> {
+            if (!user) {
+                return done(null, false, { message: "Usuario no encontrado" })
+            }
 
-    try {
-
-        // Buscamos el usuario en la base de datos usando el id guadado en el token
-        const user = await userModel.findById(jwtPayload.id) 
-
-        // Si no se encuentra el usuario, retornamos false
-        if(!user) {
-            return done(null, false, {message: "Usuario no encontrado"})
+            return done(null, new SessionUserDataDTO(user));
+        } catch (error) {
+            return done(error)
         }
-
-        // En el caso de que se encuentre el usuario, devolvemos el usuario encontrado
-        return done(null, user) 
-        // Los datos del usuario quedarán disponibles en req.user
-
-    } catch (error) {
-        return done(error)
-    }
-}))
+    }))
