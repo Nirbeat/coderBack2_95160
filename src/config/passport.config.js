@@ -39,7 +39,7 @@ passport.use("register", new LocalStrategy({usernameField: "email", passReqToCal
             const newUser = await userModel.create({
                 first_name,
                 last_name,
-                email,
+                email: normalizedEmail,
                 password: hashedPassword,
                 role: "user"
             })
@@ -48,6 +48,7 @@ passport.use("register", new LocalStrategy({usernameField: "email", passReqToCal
             // Los datos del usuario quedarán disponibles en req.user
 
         } catch (error) {
+            
             return done(error)
         }
     }

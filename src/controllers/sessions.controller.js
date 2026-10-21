@@ -2,6 +2,8 @@ import { generateToken } from "../utils/jwt.js";
 
 export async function registerController(req, res) {
 
+    console.log("Usuario registrado:", req.user);
+
     // Enviamos la respuesta
     res.status(201).json({
         status: 'success',

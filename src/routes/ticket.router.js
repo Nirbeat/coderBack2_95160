@@ -1,16 +1,14 @@
 import passport from "passport";
 import { Router } from "express";
-import { getAll, getById, purchaseTicket } from "../controllers/ticket.controller.js";
-import { ticketPermission } from "../middlewares/session.middleware.js";
+import { createTicket } from "../controllers/ticket.controller.js";
+import { authorizeRoles } from "../middlewares/authorization.middleware.js";
 
 const router = Router();
 
+// middleware que valida que el usuario esté autenticado para todas las rutas
 router.use(passport.authenticate("current", { session: false }));
 
-// este lo dejamos para más adelante
-router.get("/", getAll); //admin, organizador (solo a los propios)
-router.get("/:tid", getById);//admin, organizador (solo a los propios)
+router.post("/", authorizeRoles("user", "organizer", "admin"), createTicket)
 
-router.post("/:uid/:eid", ticketPermission, purchaseTicket);//acceden todos, con condiciones
 
 export default router;

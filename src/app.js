@@ -18,13 +18,11 @@ app.use(express.json());
 app.use(cookieParser(env.COOKIE_SECRET));
 app.use(passport.initialize())
 
-app.use("/", rootRouter);
+app.use("/api", rootRouter);
 app.use("/api/users", userRouter);
 
 
 app.use("/api/events", eventRouter);
-
-
 app.use("/api/tickets", ticketRouter);
 app.use("/api/sessions", sessionRouter);
 

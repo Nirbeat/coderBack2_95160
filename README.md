@@ -1,135 +1,156 @@
-# Curso de Programación Backend II - Clase 6
+# Curso de Programación Backend II - Clase 7
 
-## Entidad Eventos y Lógica de Negocios
+## Tickets, Inscripciones y Relaciones Prolijas
 
-En esta clase se implementó la entidad `Event` con su modelo, consultas avanzadas y reglas de negocio.
+En esta clase se implementó la entidad `Ticket` para gestionar las inscripciones de usuarios a eventos, con relaciones prolijas entre las entidades y lógica de negocio robusta para el control de capacidad y validaciones de inscripciones.
 
 ---
 
-## Modelo Event
+## Modelo Ticket
 
-Se creó el modelo `Event` en `src/models/event.model.js` con las siguientes propiedades:
+Se creó el modelo `Ticket` en `src/models/ticket.model.js` con las siguientes propiedades:
 
-- **title**: String (requerido) - Título del evento
-- **description**: String (requerido) - Descripción del evento
-- **category**: String (requerido) - Categoría del evento
-- **date**: Date (requerido) - Fecha del evento
-- **location**: String (requerido) - Ubicación del evento
-- **capacity**: Number (requerido, min: 1) - Capacidad máxima del evento
-- **price**: Number (requerido, min: 0) - Precio del evento
-- **status**: String (enum: "draft", "published", "cancelled", "finished", default: "draft") - Estado del evento
-- **organizer**: ObjectId (ref: "Users", requerido) - Usuario organizador del evento
+- **user**: ObjectId (ref: "User", requerido) - Usuario que posee el ticket
+- **event**: ObjectId (ref: "Event", requerido) - Evento al que está asociado el ticket
+- **status**: String (enum: "active", "cancelled", default: "active") - Estado del ticket
+- **quantity**: Number (default: 1, min: 1) - Cantidad de entradas reservadas
+- **code**: String (unique) - Código único del ticket (para identificación)
+- **cancelledAt**: Date (default: null) - Fecha de cancelación del ticket
 - **timestamps**: createdAt y updatedAt automáticos
 
-El schema incluye validaciones de Mongoose para asegurar la integridad de los datos (capacidad mínima 1, precio no negativo, estados válidos).
+El schema incluye validaciones de Mongoose para asegurar la integridad de los datos (cantidad mínima 1, estados válidos, código único).
 
-### Plugin de Paginación
+### Relaciones
 
-Se integró el plugin `mongoose-paginate-v2` en el schema para habilitar la paginación nativa en las consultas.
-
----
-
-## Consultas, Filtros, Paginación y Ordenamiento
-
-Se implementó la función `eventsService` en `src/services/events.services.js` que permite:
-
-### Filtros Dinámicos
-- **status**: Filtrar eventos por estado (draft, published, cancelled, finished)
-- **category**: Filtrar eventos por categoría
-- **location**: Filtrar eventos por ubicación
-
-### Paginación
-- **page**: Número de página (comienza en 1, default: 1)
-- **limit**: Cantidad de resultados por página (default: 10)
-- Retorna metadatos: `docs`, `totalDocs`, `totalPages`, `page`, `limit`, etc.
-
-### Ordenamiento
-- **sort**: Campo por el cual se ordenan los resultados (default: 'date')
-
-### Populate
-- Se popula el campo `organizer` con los datos del usuario
-- Se seleccionan solo los campos: `first_name`, `last_name`, `email`
-
-### Ejemplos de Uso
-
-```
-GET /api/events?page=1&limit=10
-GET /api/events?status=published
-GET /api/events?category=conferencia&location=buenos-aires
-GET /api/events?sort=date
-GET /api/events?page=2&limit=5&status=published&sort=price
-```
+El modelo establece relaciones prolijas con:
+- **User**: Referencia al usuario que compra el ticket
+- **Event**: Referencia al evento al que se inscribe el usuario
 
 ---
 
-## Reglas de Negocio
+## Lógica de Negocio en el Controller de Tickets
 
-Las reglas de negocio se implementaron principalmente en `src/services/events.services.js`:
+La lógica de negocio principal se implementó en `src/controllers/ticket.controller.js` en la función `createTicket`:
 
-### Control de Permisos
+### Validaciones Implementadas
 
-Función interna `canManageEvent`:
-- Los usuarios con rol `admin` pueden administrar cualquier evento
-- Los organizadores solo pueden administrar sus propios eventos
-- Se comparan los IDs como strings para evitar errores de referencia de objetos
+1. **Existencia del evento**: Verifica que el evento exista en la base de datos
+2. **Estado del evento**: El evento debe estar publicado (status: "published")
+3. **Fecha del evento**: El evento no debe haber pasado (date > fecha actual)
+4. **Ticket único por usuario**: Un usuario no puede tener más de un ticket activo para el mismo evento
+5. **Control de capacidad**: Verifica que haya suficientes entradas disponibles antes de crear el ticket
 
-### Crear Evento (`createEvent`)
+### Cálculo de Capacidad Disponible
 
-Validaciones implementadas:
-1. **Autenticación**: Verifica que exista un usuario autenticado para asignar la propiedad del evento
-2. **Fecha futura**: La fecha del evento debe ser posterior a la fecha actual
-3. **Capacidad positiva**: La capacidad debe ser mayor a cero
-4. **Precio no negativo**: El precio no puede ser negativo (0 para eventos gratuitos)
-5. **Propiedad segura**: El `organizer` se asigna desde `req.user._id`, no del body del cliente
-6. **Estado inicial**: Los eventos se crean con estado `draft` por defecto
+Se utiliza una operación de agregación de MongoDB para calcular las entradas reservadas:
 
-### Actualizar Evento (`updateEvent`)
+```javascript
+const result = await ticketModel.aggregate([
+    {$match: {event: event._id, status: "active"}},
+    {$group: {_id: "$event", totalReserved: {$sum: "$quantity"}}}
+])
+```
 
-Validaciones implementadas:
-1. **Existencia**: Verifica que el evento exista en la base de datos
-2. **Permisos**: Verifica que el usuario tenga permiso para modificar (propietario o admin)
-3. **Estado cancelado**: Los eventos cancelados no pueden modificarse (estado final)
-4. **Campos permitidos**: Solo se permite modificar: `title`, `description`, `category`, `date`, `location`, `capacity`, `price`
-5. **Protección de campos**: No se permite modificar `organizer` ni `status` directamente
-6. **Validaciones en actualización**:
-   - Si se modifica la fecha, debe seguir siendo futura
-   - Si se modifica la capacidad, debe ser mayor a cero
-   - Si se modifica el precio, no puede ser negativo
+- Filtra tickets activos para el evento específico
+- Agrupa por evento y suma las cantidades de todos los tickets activos
+- Calcula la disponibilidad: `available = event.capacity - reserved`
+- Valida que la cantidad solicitada no supere la disponibilidad
+
+### Creación del Ticket
+
+Si todas las validaciones pasan:
+- Se crea el ticket con el usuario autenticado (`req.user._id`)
+- Se asigna el evento y la cantidad solicitada
+- El estado por defecto es "active"
+- El código único se genera automáticamente (pendiente de implementación)
+
+---
+
+## Rutas de Tickets
+
+Las rutas se definen en `src/routes/ticket.router.js`:
+
+### Middleware de Autenticación
+- Todas las rutas requieren autenticación mediante Passport JWT
+- Se usa `passport.authenticate("current", { session: false })`
+
+### Rutas Disponibles
+
+```
+POST /api/tickets
+```
+
+- **Roles permitidos**: user, organizer, admin
+- **Body esperado**: `{ eventId, quantity }`
+- **Respuesta exitosa**: 201 con el ticket creado
+- **Errores**: 400 para validaciones fallidas, 404 para evento no encontrado, 500 para errores del servidor
+
+---
+
+## Modelos Relacionados
+
+### Modelo User
+
+Definido en `src/models/user.model.js`:
+
+- **first_name**: String (requerido)
+- **last_name**: String (requerido)
+- **email**: String (requerido, unique)
+- **password**: String (requerido)
+- **role**: String (enum: "user", "admin", "organizer", default: "user")
+
+### Modelo Event
+
+Definido en `src/models/event.model.js`:
+
+- **title**: String (requerido)
+- **description**: String (requerido)
+- **category**: String (requerido)
+- **date**: Date (requerido)
+- **location**: String (requerido)
+- **capacity**: Number (requerido, min: 1)
+- **price**: Number (requerido, min: 0)
+- **status**: String (enum: "draft", "published", "cancelled", "finished", default: "draft")
+- **organizer**: ObjectId (ref: "Users", requerido)
+- **timestamps**: createdAt y updatedAt automáticos
+- **Plugin**: mongoose-paginate-v2 para paginación
 
 ---
 
 ## Arquitectura
 
-Se mantuvo la arquitectura en capas sin agregar capas adicionales (repository, dao, etc.):
+Se mantiene la arquitectura en capas:
 
 ```
-Route → Controller → Service → Model (Mongoose) → MongoDB
+Route → Controller → Model (Mongoose) → MongoDB
 ```
 
 ### Archivos Principales
 
-- **`src/models/event.model.js`**: Definición del schema de Event con plugin de paginación
-- **`src/services/events.services.js`**: Lógica de negocio, consultas, filtros y validaciones
-- **`src/controllers/event.controller.js`**: Manejo de peticiones HTTP y respuestas
-- **`src/routes/event.router.js`**: Definición de rutas con middleware de autenticación y roles
+- **`src/models/ticket.model.js`**: Definición del schema de Ticket con relaciones
+- **`src/controllers/ticket.controller.js`**: Lógica de negocio para creación de tickets y validaciones
+- **`src/routes/ticket.router.js`**: Definición de rutas con middleware de autenticación y autorización
+- **`src/models/user.model.js`**: Definición del schema de User
+- **`src/models/event.model.js`**: Definición del schema de Event con paginación
 
 ---
+
 
 ## Comentarios en el Código
 
-Recuerden que el código contiene comentarios explicativos y que en cada sección importante se suelen detallar:
-- Propósito de cada función
-- Validaciones realizadas
+El código contiene comentarios explicativos que detallan:
+- Propósito de cada validación
 - Razones de las reglas de negocio
-- Explicación de parámetros y configuraciones
-
+- Explicación de operaciones de agregación
+- Manejo de errores y respuestas HTTP
 
 ---
 
-## Algunas notas complementarias
+## Notas Complementarias
 
-- La propiedad del recurso se controla desde el backend usando `req.user`, no desde el body
-- Los estados `cancelled` y `finished` son estados finales que no admiten transiciones
-- La paginación usa `mongoose-paginate-v2` para simplificar la implementación
-- Todas las validaciones de negocio están en el service layer
-- El controller se limita a manejar HTTP y delegar la lógica al service
+- La propiedad del ticket se asigna desde `req.user._id`, no desde el body del cliente
+- El control de capacidad se realiza en tiempo real usando agregación de MongoDB
+- Los tickets cancelados no se cuentan en el cálculo de capacidad (status: "cancelled")
+- Un usuario solo puede tener un ticket activo por evento (evita múltiples inscripciones)
+- La lógica de negocio está centralizada en el controller para este caso particular
+- Se usa Passport JWT para autenticación sin sesiones (stateless)
